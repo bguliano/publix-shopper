@@ -1,9 +1,11 @@
+import io
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
+from PIL import Image
 from bs4 import BeautifulSoup, Tag
 
 URL = 'https://accessibleweeklyad.publix.com/PublixAccessibility/Entry/LandingContent?storeid=2501023'
@@ -12,6 +14,7 @@ BASE_URL = '{uri.scheme}://{uri.netloc}'.format(uri=urlparse(URL))
 
 @dataclass(frozen=True)
 class DepartmentItem:
+    listing_id: int
     title: str
     deal: str
     additional_deal_info: str
@@ -25,6 +28,11 @@ class DepartmentItem:
         image_bytes = requests.get(self.image_url).content
         Path(filename := f'{self.title}.png').write_bytes(image_bytes)
         return filename
+
+    def show_image(self):
+        image_bytes = requests.get(self.image_url).content
+        bytes_obj = io.BytesIO(image_bytes)
+        Image.open(bytes_obj).show()
 
 
 class Department:
@@ -48,14 +56,15 @@ class Department:
         soup = BeautifulSoup(content, features='html.parser')
         item_containers: list[Tag] = soup.find_all('div', class_='theTileContainer')
         for container in item_containers:
-            raw_style = container.find('img').get('style')
-            item_image_url = 'https:' + re.search(r'url\(([^)]+)\)', raw_style).group(1)
-            self._parse_item(container, item_image_url)
+            self._parse_item(container)
 
-    def _parse_item(self, container: Tag, image_url: str):
+    def _parse_item(self, container: Tag):
+        raw_style = container.find('img').get('style')
+        image_url = 'https:' + re.search(r'url\(([^)]+)\)', raw_style).group(1)
         title = self._get_tag_text(container, 'div', 'title')
         print(f'{self.name} - {title}...', end='', flush=True)
         self.items.append(DepartmentItem(
+            listing_id=int(container.get('data-listingid')),
             title=title,
             deal=self._get_tag_text(container, 'div', 'deal'),
             additional_deal_info=self._get_tag_text(container, 'div', 'additionalDealInfo'),

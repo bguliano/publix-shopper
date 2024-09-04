@@ -1,0 +1,1 @@
+window.addEventListener('load', function() {document.querySelectorAll('button[id^="add-to-list-btn"]').forEach(el => el.setAttribute('onclick', "fetch(`http://localhost:5000/add_to_list/${(function() { return window.location.pathname.split('/').pop(); })()}`);"));})
