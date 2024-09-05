@@ -1,35 +1,26 @@
 import atexit
-import io
-import json
 import pickle
 import time
-import urllib.parse
-from dataclasses import dataclass
 from pathlib import Path
 from threading import Thread
-from typing import Optional
 
-import requests
-from PIL import Image
 from selenium import webdriver
 
+from grocery_list import GroceryList
 
-@dataclass
-class PublixProduct:
-    name: str
-    code: str
-    image_url: str
-    location: str
 
-    def save_image(self) -> str:
-        image_bytes = requests.get(self.image_url).content
-        Path(filename := f'{self.name}.png').write_bytes(image_bytes)
-        return filename
+def ask_float_question(question: str, min_: float, max_: float) -> float:
+    def is_float(x):
+        try:
+            float(x)
+        except ValueError:
+            return False
+        return True
 
-    def show_image(self):
-        image_bytes = requests.get(self.image_url).content
-        bytes_obj = io.BytesIO(image_bytes)
-        Image.open(bytes_obj).show()
+    while not is_float(inpt := input(question)) and (min_ <= float(inpt) <= max_):
+        print(f'Please enter a float between {min_} and {max_}')
+
+    return float(inpt)
 
 
 class WebDriverGetShoppingListCookie:
@@ -62,52 +53,42 @@ class PublixScraper:
         self.grocery_list_cookie = {}
         atexit.register(self.save_grocery_list_cookie)
 
+        self.grocery_list = GroceryList.import_()
+        if not self.grocery_list:
+            self.grocery_list = GroceryList.new(store_num)
+        atexit.register(self.grocery_list.export)
+
     def save_grocery_list_cookie(self):
+        # pickle cookie_data
         cookie_data = pickle.dumps(self.grocery_list_cookie)
         Path('grocery_list_cookie.pkl').write_bytes(cookie_data)
-
-    @property
-    def grocery_list_id(self) -> Optional[str]:
-        if not self.grocery_list_cookie:
-            return
-
-        unquoted = urllib.parse.unquote(self.grocery_list_cookie['value'])
-        return json.loads(unquoted)['id']
-
-    def get_grocery_list(self) -> dict[str, list[PublixProduct]]:
-        # early exit if no grocery list id
-        if not (grocery_list_id := self.grocery_list_id):
-            return {}
-
-        # make request to publix api
-        base_url = 'https://services.publix.com/api/v1/GroceryList/GetListWithSavings?groceryListId={}'
-        formatted_id = urllib.parse.quote(grocery_list_id)
-        response = requests.get(base_url.format(formatted_id), headers={'Publixstore': str(self.store_num)})
-        json_response = response.json()
-
-        # begin formatting json response
-        result = {}
-        for location_dict in json_response['locations']:
-            result[location_dict['name']] = [
-                PublixProduct(
-                    name=item_dict['Name'],
-                    code=item_dict['ProductItemCode'],
-                    image_url=item_dict['ImageUrl'],
-                    location=item_dict['Location']
-                )
-                for item_dict in location_dict['items']
-            ]
-        return result
 
     def start(self):
         self.driver.get(f'https://www.publix.com?setstorenumber={self.store_num}')
 
+        # add grocery list cookie to driver if it exists
         if (cookie_path := Path('grocery_list_cookie.pkl')).exists():
             cookie_data = cookie_path.read_bytes()
             self.grocery_list_cookie.update(pickle.loads(cookie_data))
             self.driver.add_cookie(self.grocery_list_cookie)
 
+        # wait until user closes the browser
         WebDriverGetShoppingListCookie(self.driver, self.grocery_list_cookie).wait()
+
+        # update current grocery list with new ones from this session
+        new_grocery_list = GroceryList.from_cookie(self.grocery_list_cookie, self.store_num)
+        self.grocery_list.merge(new_grocery_list)
+
+        # ask user how much of each item should be added to list
+        for product in self.grocery_list.unsorted_products:
+            if product.quantity:
+                continue
+            quantity = ask_float_question(f'How much of {product.name} do you have?', 0, 1)
+            product.quantity = quantity
+
+        # save and print out new grocery list
+        self.grocery_list.export()
+        self.grocery_list.print()
 
 
 if __name__ == '__main__':
