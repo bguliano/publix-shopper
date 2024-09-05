@@ -1,11 +1,8 @@
-import io
 import re
 from dataclasses import dataclass
-from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
-from PIL import Image
 from bs4 import BeautifulSoup, Tag
 
 URL = 'https://accessibleweeklyad.publix.com/PublixAccessibility/Entry/LandingContent?storeid=2501023'
@@ -23,16 +20,6 @@ class DepartmentItem:
     coupon_api_terms: str
     description: str
     image_url: str
-
-    def save_image(self) -> str:
-        image_bytes = requests.get(self.image_url).content
-        Path(filename := f'{self.title}.png').write_bytes(image_bytes)
-        return filename
-
-    def show_image(self):
-        image_bytes = requests.get(self.image_url).content
-        bytes_obj = io.BytesIO(image_bytes)
-        Image.open(bytes_obj).show()
 
 
 class Department:

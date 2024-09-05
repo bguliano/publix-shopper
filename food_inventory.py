@@ -77,7 +77,7 @@ class PublixScraper:
 
         # update current grocery list with new ones from this session
         new_grocery_list = GroceryList.from_cookie(self.grocery_list_cookie, self.store_num)
-        self.grocery_list.merge(new_grocery_list)
+        self.grocery_list.update_from(new_grocery_list)
 
         # ask user how much of each item should be added to list
         for product in self.grocery_list.unsorted_products:
@@ -87,6 +87,7 @@ class PublixScraper:
             product.quantity = quantity
 
         # save and print out new grocery list
+        print()
         self.grocery_list.export()
         self.grocery_list.print()
 

@@ -1,4 +1,3 @@
-import io
 import itertools
 import json
 import pickle
@@ -8,7 +7,6 @@ from pathlib import Path
 from typing import Optional, Self, Any
 
 import requests
-from PIL import Image
 
 
 @dataclass(frozen=True)
@@ -29,15 +27,8 @@ class PublixProduct:
     location: str
     quantity: Optional[float] = None
 
-    def save_image(self) -> str:
-        image_bytes = requests.get(self.image_url).content
-        Path(filename := f'{self.name}.png').write_bytes(image_bytes)
-        return filename
-
-    def show_image(self):
-        image_bytes = requests.get(self.image_url).content
-        bytes_obj = io.BytesIO(image_bytes)
-        Image.open(bytes_obj).show()
+    def __eq__(self, other):
+        return self.name == other.name
 
     def is_low(self) -> bool:
         return self.quantity < 0.2
@@ -107,7 +98,7 @@ class GroceryList:
 
     @property
     def unsorted_products(self) -> list[PublixProduct]:
-        return list(itertools.chain.from_iterable(self._sorted_products.values()))
+        return list(itertools.chain.from_iterable(self._sorted_products.values())).copy()
 
     @property
     def store_information(self) -> PublixStoreInformation:
@@ -132,8 +123,28 @@ class GroceryList:
         (filepath := Path(self.default_export_path)).write_bytes(data)
         return str(filepath)
 
-    def merge(self, other_grocery_list: Self):
-        self._sorted_products.update(other_grocery_list._sorted_products)
+    def update_from(self, other_grocery_list: Self):
+        # can't just use dict.update since that removes quantity values
+        original_products = self.unsorted_products
+
+        # update quantity values if necessary
+        for product_list in other_grocery_list._sorted_products.values():
+            for product in product_list:
+                # only update quantity value if it doesn't already exist
+                if product.quantity:
+                    continue
+
+                # attempt to find matching PublixProduct
+                try:
+                    idx = original_products.index(product)
+                except ValueError:
+                    continue
+
+                # if found, update
+                product.quantity = original_products[idx].quantity
+
+        # set current dict to updated dict
+        self._sorted_products = other_grocery_list._sorted_products
 
     def print(self):
         store_info = self.store_information
