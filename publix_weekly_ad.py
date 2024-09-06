@@ -1,4 +1,3 @@
-import atexit
 import difflib
 import itertools
 import pickle
@@ -18,13 +17,14 @@ from publix_store_info import PublixStoreInfo
 class PublixDeal:
     listing_id: int
     title: str
-    deal: str
-    additional_deal_info: str
-    valid_dates: str
-    contain_redemption_info: str
-    coupon_api_terms: str
-    description: str
+    deal: Optional[str]
+    additional_deal_info: Optional[str]
+    valid_dates: Optional[str]
+    contain_redemption_info: Optional[str]
+    coupon_api_terms: Optional[str]
+    description: Optional[str]
     image_url: str
+    is_coupon: bool
 
     def __eq__(self, other):
         return self.title == other.title
@@ -92,12 +92,12 @@ class PublixWeeklyAd:
         print('Done')
 
     @staticmethod
-    def _get_tag_text(container_tag: Tag, tag_name: str, class_name: str) -> str:
+    def _get_tag_text(container_tag: Tag, tag_name: str, class_name: str) -> Optional[str]:
         try:
             return container_tag.find(tag_name, class_=class_name).text.strip()
         except AttributeError:
             # print(f'No {class_name} found...', end='', flush=True)
-            return ''
+            return None
 
     def _parse_item(self, container: Tag) -> PublixDeal:
         raw_style = container.find('img').get('style')
@@ -112,7 +112,8 @@ class PublixWeeklyAd:
             contain_redemption_info=self._get_tag_text(container, 'div', 'containRedemptionInfo'),
             coupon_api_terms=self._get_tag_text(container, 'p', 'couponAPITerms'),
             description=self._get_tag_text(container, 'div', 'description'),
-            image_url=image_url
+            image_url=image_url,
+            is_coupon=container.find('a', class_='printcouponlink') is not None
         )
 
     @property
