@@ -1,3 +1,4 @@
+import atexit
 import difflib
 import itertools
 import pickle
@@ -34,11 +35,12 @@ UnsortedDeals = list[PublixDeal]
 
 
 class PublixWeeklyAd:
-    default_export_path = ''
+    default_export_path = 'weekly_ad_export.pkl'
 
     def __init__(self, *, store_id: int):
         self.store_id = store_id
         self._sorted_deals: SortedDeals = {}
+        # atexit.register(self.export)
 
         # if export not found, go straight to regenerate deals and exit
         if not (filepath := Path(self.default_export_path)).exists():
@@ -81,20 +83,20 @@ class PublixWeeklyAd:
         }
 
     def _parse_listing(self, url: str) -> Generator[PublixDeal, None, None]:
-        content = requests.get(url).content
+        print(f'Parsing "{url}"...', end='', flush=True)
+        content = requests.get(url).content.decode('utf-8')
         soup = BeautifulSoup(content, features='html.parser')
         item_containers: list[Tag] = soup.find_all('div', class_='theTileContainer')
         for container in item_containers:
-            print('Parsing ')
             yield self._parse_item(container)
-            print('Done')
+        print('Done')
 
     @staticmethod
     def _get_tag_text(container_tag: Tag, tag_name: str, class_name: str) -> str:
         try:
-            return container_tag.find(tag_name, class_=class_name).text.strip().replace('â', '®')
+            return container_tag.find(tag_name, class_=class_name).text.strip()
         except AttributeError:
-            print(f'No {class_name} found...', end='', flush=True)
+            # print(f'No {class_name} found...', end='', flush=True)
             return ''
 
     def _parse_item(self, container: Tag) -> PublixDeal:
@@ -158,4 +160,5 @@ class PublixWeeklyAd:
 
 
 if __name__ == '__main__':
-    wa = PublixWeeklyAd(store_id=1095)
+    pwa = PublixWeeklyAd.from_store_num(1095)
+    pass

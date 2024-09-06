@@ -46,10 +46,14 @@ class PublixProduct:
         return f'{round((1 - self.quantity) * 100)}% used'
 
 
+SortedProducts = dict[str, list[PublixProduct]]
+UnsortedProducts = list[PublixProduct]
+
+
 class PublixGroceryList:
     default_export_path = 'grocery_list_export.pkl'
 
-    def __init__(self, store_num: int, sorted_products: dict[str, list[PublixProduct]]):
+    def __init__(self, store_num: int, sorted_products: SortedProducts):
         self.store_num = store_num
         self._sorted_products = sorted_products
 
@@ -98,11 +102,11 @@ class PublixGroceryList:
         return cls(store_num, dict())
 
     @property
-    def sorted_products(self) -> dict[str, list[PublixProduct]]:
+    def sorted_products(self) -> SortedProducts:
         return self._sorted_products.copy()
 
     @property
-    def unsorted_products(self) -> list[PublixProduct]:
+    def unsorted_products(self) -> UnsortedProducts:
         return list(itertools.chain.from_iterable(self._sorted_products.values())).copy()
 
     def export(self) -> str:
