@@ -6,7 +6,7 @@ from threading import Thread
 
 from selenium import webdriver
 
-from grocery_list import GroceryList
+from publix_grocery_list import PublixGroceryList
 
 
 def ask_float_question(question: str, min_: float, max_: float) -> float:
@@ -39,7 +39,7 @@ class WebDriverGetShoppingListCookie:
             time.sleep(1)
 
 
-class PublixScraper:
+class PublixInventory:
     def __init__(self, *, store_num: int = 1095):
         self.store_num = store_num
 
@@ -53,9 +53,9 @@ class PublixScraper:
         self.grocery_list_cookie = {}
         atexit.register(self.save_grocery_list_cookie)
 
-        self.grocery_list = GroceryList.import_()
+        self.grocery_list = PublixGroceryList.import_()
         if not self.grocery_list:
-            self.grocery_list = GroceryList.new(store_num)
+            self.grocery_list = PublixGroceryList.new(store_num)
         atexit.register(self.grocery_list.export)
 
     def save_grocery_list_cookie(self):
@@ -76,7 +76,7 @@ class PublixScraper:
         WebDriverGetShoppingListCookie(self.driver, self.grocery_list_cookie).wait()
 
         # update current grocery list with new ones from this session
-        new_grocery_list = GroceryList.from_cookie(self.grocery_list_cookie, self.store_num)
+        new_grocery_list = PublixGroceryList.from_cookie(self.grocery_list_cookie, self.store_num)
         self.grocery_list.update_from(new_grocery_list)
 
         # ask user how much of each item should be added to list
@@ -93,5 +93,5 @@ class PublixScraper:
 
 
 if __name__ == '__main__':
-    ps = PublixScraper()
+    ps = PublixInventory()
     ps.start()

@@ -8,15 +8,14 @@ from typing import Optional, Self, Any
 
 import requests
 
+from publix_store_info import PublixStoreInfo
+
 
 @dataclass(frozen=True)
-class PublixStoreInformation:
-    raw: dict[str, Any]
-    store_num: int
-    name: str
-    image_url: str
-    address: str
-    phone_number: str
+class PublixProductDeal:
+    description: str
+    value_description: str
+    expiration_date: str
 
 
 @dataclass
@@ -25,6 +24,7 @@ class PublixProduct:
     code: str
     image_url: str
     location: str
+    deal: Optional[PublixProductDeal]
     quantity: Optional[float] = None
 
     def __eq__(self, other):
@@ -46,7 +46,7 @@ class PublixProduct:
         return f'{round((1 - self.quantity) * 100)}% used'
 
 
-class GroceryList:
+class PublixGroceryList:
     default_export_path = 'grocery_list_export.pkl'
 
     def __init__(self, store_num: int, sorted_products: dict[str, list[PublixProduct]]):
@@ -69,7 +69,12 @@ class GroceryList:
                     name=item_dict['Name'],
                     code=item_dict['ProductItemCode'],
                     image_url=item_dict['ImageUrl'],
-                    location=item_dict['Location']
+                    location=item_dict['Location'],
+                    deal=PublixProductDeal(
+                        description=item_dict['PriceDescription'],
+                        value_description=item_dict['ValueDescription'],
+                        expiration_date=item_dict['PriceExpirationDate']
+                    ) if item_dict['PriceDescription'] else None
                 )
                 for item_dict in location_dict['items']
             ]
@@ -100,24 +105,6 @@ class GroceryList:
     def unsorted_products(self) -> list[PublixProduct]:
         return list(itertools.chain.from_iterable(self._sorted_products.values())).copy()
 
-    @property
-    def store_information(self) -> PublixStoreInformation:
-        # request GET
-        base_url = 'https://services.publix.com/storelocator/api/v1/stores/?storeNumber={}&count=1'
-        response = requests.get(base_url.format(self.store_num))
-        response_json: dict[str, Any] = response.json()
-
-        # parse
-        store_json = response_json['stores'][0]
-        return PublixStoreInformation(
-            raw=store_json.copy(),
-            store_num=int(store_json['storeNumber']),
-            name=store_json['name'],
-            image_url=store_json['image']['hero'],
-            address=', '.join(store_json['address'].values()),
-            phone_number=store_json['phoneNumbers']['Store']
-        )
-
     def export(self) -> str:
         data = pickle.dumps(self)
         (filepath := Path(self.default_export_path)).write_bytes(data)
@@ -147,19 +134,19 @@ class GroceryList:
         self._sorted_products = other_grocery_list._sorted_products
 
     def print(self):
-        store_info = self.store_information
+        store_info = PublixStoreInfo(self.store_num)
         print(f'{store_info.name} ({store_info.address}):')
         longest_product_name = max((len(x.name) for x in self.unsorted_products))
         for location, products in self._sorted_products.items():
             print(f'\t{location}:')
             for product in products:
-                print(f'\t\t{product.name:<{longest_product_name}} - {product.percent_left}')
+                print(f'\t{" !! " if product.deal else "\t"}{product.name:<{longest_product_name}} - '
+                      f'{product.percent_left}')
             print()
 
 
 if __name__ == '__main__':
-    gl = GroceryList.import_()
-    if gl:
+    if gl := PublixGroceryList.import_():
         gl.print()
     else:
         print('No export file found')
