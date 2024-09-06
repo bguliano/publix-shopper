@@ -1,3 +1,4 @@
+import atexit
 import difflib
 import itertools
 import pickle
@@ -40,7 +41,7 @@ class PublixWeeklyAd:
     def __init__(self, *, store_id: int):
         self.store_id = store_id
         self._sorted_deals: SortedDeals = {}
-        # atexit.register(self.export)
+        atexit.register(self.export)
 
         # if export not found, go straight to regenerate deals and exit
         if not (filepath := Path(self.default_export_path)).exists():
