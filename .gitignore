@@ -241,6 +241,5 @@ cython_debug/
 
 # Custom
 api_findings
-grocery_list_cookie.pkl
-grocery_list_export.pkl
-weekly_ad_export.pkl
+export_weekly_ad.pkl
+export_grocery_list.pkl
