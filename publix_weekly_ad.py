@@ -134,42 +134,23 @@ class PublixWeeklyAd:
 
     @property
     def unsorted_deals(self) -> UnsortedDeals:
-        return list(itertools.chain.from_iterable(self._sorted_deals.values())).copy()
+        return list(set(itertools.chain.from_iterable(self._sorted_deals.values()))).copy()
 
     def export(self) -> str:
         data = pickle.dumps(self)
         (filepath := Path(self.default_export_path)).write_bytes(data)
         return str(filepath)
 
-    def find_best_match(self, query: str) -> Optional[PublixDeal]:
+    def find_best_matches(self, query: str) -> tuple[PublixDeal, ...]:
         # Extract the titles from the deals
         all_items = self.unsorted_deals
-        all_titles = [item.title.replace('®', '') for item in all_items]
-        all_descriptions = [item.description.replace('®', '') for item in all_items]
-        query = query.replace('®', '')
+        all_titles = map(lambda x: x.title, all_items)
 
-        def get_matches(cutoff: float) -> tuple[list[str], list[str]]:
-            title_match = difflib.get_close_matches(query, all_titles, n=1, cutoff=cutoff)
-            desc_match = difflib.get_close_matches(query, all_descriptions, n=1, cutoff=cutoff)
-            return title_match, desc_match
+        # calculate similarity ratios
+        best_matches = difflib.get_close_matches(query, all_titles, n=3, cutoff=0.1)
 
-        # Get the best match from the list of deal titles
-        best_match = ''
-        for i in range(10, 100):
-            best_match_title, best_match_desc = get_matches(i / 100)
-            if len(best_match_title) == 0:
-                best_match = best_match_desc[0]
-                break
-            if len(best_match_desc) == 0:
-                best_match = best_match_title[0]
-                break
-
-        # Find the corresponding Deal object
-        for item in all_items:
-            if item.title == best_match:
-                return item
-
-        return None
+        # Find the corresponding Deal objects
+        return tuple(filter(lambda x: x.title in best_matches, all_items))
 
 
 if __name__ == '__main__':
