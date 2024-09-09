@@ -1,41 +1,106 @@
 import atexit
-import pickle
+import json
 import time
-from pathlib import Path
 from threading import Thread
+from typing import Optional
 
 from selenium import webdriver
 
+import webdriver_tools
 from publix_grocery_list import PublixGroceryList
 
 
-def ask_float_question(question: str, min_: float, max_: float) -> float:
-    def is_float(x):
-        try:
-            float(x)
-        except ValueError:
-            return False
-        return True
+class WebDriverWatchGroceryList(Thread):
+    def __init__(self, driver: webdriver.Chrome, store_num: int):
+        Thread.__init__(self)
+        self.driver = driver
+        self.store_num = store_num
+        self.grocery_list: Optional[PublixGroceryList] = PublixGroceryList.import_()
 
-    while not is_float(inpt := input(question)) and (min_ <= float(inpt) <= max_):
-        print(f'Please enter a float between {min_} and {max_}')
+    def watch(self) -> Optional[PublixGroceryList]:
+        # first, inject grocery list cookie if grocery list exists
+        if self.grocery_list:
+            atexit.register(self.grocery_list.export)
+            cookie_data = json.dumps({'id': self.grocery_list.grocery_list_id})
+            self.driver.add_cookie({
+                'name': 'GroceryList',
+                'value': cookie_data,
+                'domain': '.publix.com'
+            })
+            self.driver.add_cookie({
+                'name': 'ShoppingListCount',
+                'value': str(len(self.grocery_list)),
+                'domain': '.publix.com'
+            })
 
-    return float(inpt)
+        # then, start the thread
+        self.start()
+        self.join()
 
+        # give back grocery list
+        return self.grocery_list
 
-class WebDriverGetShoppingListCookie:
-    def __init__(self, driver: webdriver.Chrome, cookie_dict: dict):
-        self._thread = Thread(target=self._check_driver, args=(driver, cookie_dict))
+    def get_shopping_list_count(self) -> int:
+        if not (cookie := webdriver_tools.safe_get_cookie(self.driver, 'ShoppingListCount')):
+            return 0
+        return int(cookie['value'])
 
-    def wait(self):
-        self._thread.start()
-        self._thread.join()
+    def ask_quantity(self, product_name: str) -> float:
+        def is_valid(x: Optional[str]):
+            if not x:
+                return False
 
-    @staticmethod
-    def _check_driver(driver: webdriver.Chrome, cookie_dict: dict):
-        while driver.window_handles:
-            if potential_cookie := driver.get_cookie('GroceryList'):
-                cookie_dict.update(potential_cookie)
+            try:
+                if x.endswith('%'):
+                    y = int(x[:-1]) / 100
+                else:
+                    y = float(x)
+            except ValueError:
+                return False
+
+            return 0 <= y <= 1
+
+        while not is_valid(inpt := webdriver_tools.prompt(self.driver, f'How much {product_name} do you have?')):
+            webdriver_tools.alert(
+                self.driver,
+                'Please enter a decimal between 0 and 1 or percentage between 0% and 100%'
+            )
+
+        if inpt.endswith('%'):
+            return float(inpt[:-1]) / 100
+        return float(inpt)
+
+    def update_grocery_list(self):
+        # first, update grocery list
+        cookie = webdriver_tools.safe_get_cookie(self.driver, 'GroceryList')
+        new_list = PublixGroceryList.from_cookie(cookie, self.store_num)
+        if self.grocery_list:
+            self.grocery_list.update_from(new_list)
+        else:
+            self.grocery_list = new_list
+
+        # second, prompt user if necessary
+        for product in self.grocery_list.unsorted_products:
+            if product.quantity:
+                continue
+            quantity = self.ask_quantity(product.name)
+            product.quantity = quantity
+
+        # third, save changes
+        self.grocery_list.export()
+
+    def run(self) -> None:
+        # only run while driver is open
+        while self.driver.window_handles:
+
+            # check if shopping list has changed
+            count = self.get_shopping_list_count()
+            if count > 0 and not self.grocery_list:
+                self.update_grocery_list()
+            elif self.grocery_list and len(self.grocery_list) != count:
+                self.update_grocery_list()
+
+            # sleep to prevent spam
             time.sleep(1)
 
 
@@ -50,46 +115,15 @@ class PublixInventory:
         self.driver = webdriver.Chrome(options)
         print('Done')
 
-        self.grocery_list_cookie = {}
-        atexit.register(self.save_grocery_list_cookie)
-
-        self.grocery_list = PublixGroceryList.import_()
-        if not self.grocery_list:
-            self.grocery_list = PublixGroceryList.new(store_num)
-        atexit.register(self.grocery_list.export)
-
-    def save_grocery_list_cookie(self):
-        # pickle cookie_data
-        cookie_data = pickle.dumps(self.grocery_list_cookie)
-        Path('grocery_list_cookie.pkl').write_bytes(cookie_data)
-
     def start(self):
         self.driver.get(f'https://www.publix.com?setstorenumber={self.store_num}')
 
-        # add grocery list cookie to driver if it exists
-        if (cookie_path := Path('grocery_list_cookie.pkl')).exists():
-            cookie_data = cookie_path.read_bytes()
-            self.grocery_list_cookie.update(pickle.loads(cookie_data))
-            self.driver.add_cookie(self.grocery_list_cookie)
-
         # wait until user closes the browser
-        WebDriverGetShoppingListCookie(self.driver, self.grocery_list_cookie).wait()
-
-        # update current grocery list with new ones from this session
-        new_grocery_list = PublixGroceryList.from_cookie(self.grocery_list_cookie, self.store_num)
-        self.grocery_list.update_from(new_grocery_list)
-
-        # ask user how much of each item should be added to list
-        for product in self.grocery_list.unsorted_products:
-            if product.quantity:
-                continue
-            quantity = ask_float_question(f'How much of {product.name} do you have?', 0, 1)
-            product.quantity = quantity
+        grocery_list = WebDriverWatchGroceryList(self.driver, self.store_num).watch()
 
         # save and print out new grocery list
         print()
-        self.grocery_list.export()
-        self.grocery_list.print()
+        grocery_list.print()
 
 
 if __name__ == '__main__':
