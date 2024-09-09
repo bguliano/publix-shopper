@@ -51,9 +51,10 @@ UnsortedProducts = list[PublixProduct]
 
 
 class PublixGroceryList:
-    default_export_path = 'grocery_list_export.pkl'
+    default_export_path = 'export_grocery_list.pkl'
 
-    def __init__(self, store_num: int, sorted_products: SortedProducts):
+    def __init__(self, grocery_list_id: str, store_num: int, sorted_products: SortedProducts):
+        self.grocery_list_id = grocery_list_id
         self.store_num = store_num
         self._sorted_products = sorted_products
 
@@ -82,7 +83,7 @@ class PublixGroceryList:
                 )
                 for item_dict in location_dict['items']
             ]
-        return cls(store_num, result)
+        return cls(grocery_list_id, store_num, result)
 
     @classmethod
     def from_cookie(cls, cookie: dict[str, Any], store_num: int) -> Self:
@@ -97,10 +98,6 @@ class PublixGroceryList:
         data = filepath.read_bytes()
         return pickle.loads(data)
 
-    @classmethod
-    def new(cls, store_num: int) -> Self:
-        return cls(store_num, dict())
-
     @property
     def sorted_products(self) -> SortedProducts:
         return self._sorted_products.copy()
@@ -108,6 +105,9 @@ class PublixGroceryList:
     @property
     def unsorted_products(self) -> UnsortedProducts:
         return list(itertools.chain.from_iterable(self._sorted_products.values())).copy()
+
+    def __len__(self) -> int:
+        return len(self.unsorted_products)
 
     def export(self) -> str:
         data = pickle.dumps(self)
