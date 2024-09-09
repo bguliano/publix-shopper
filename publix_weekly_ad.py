@@ -4,6 +4,7 @@ import itertools
 import pickle
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Generator, Optional, Self
 from urllib.parse import urlparse
@@ -36,7 +37,7 @@ UnsortedDeals = list[PublixDeal]
 
 
 class PublixWeeklyAd:
-    default_export_path = 'weekly_ad_export.pkl'
+    default_export_path = 'export_weekly_ad.pkl'
 
     def __init__(self, *, store_id: int):
         self.store_id = store_id
@@ -54,6 +55,16 @@ class PublixWeeklyAd:
         self._sorted_deals = old_weekly_ad._sorted_deals
 
         # if deals have not expired, return
+        unique_dates = set(x.valid_dates for x in self.unsorted_deals if x.valid_dates)
+        today = datetime.now().date()
+        earliest_expiry_date = min(
+            datetime.strptime(
+                re.search(r'(\d{1,2}/\d{1,2})\s*$', text).group(1), '%m/%d'
+            ).replace(year=today.year).date()
+            for text in unique_dates
+        )
+        if earliest_expiry_date >= today:
+            return
 
         # if here, then search for new deals
         self.regenerate_deals()
@@ -163,4 +174,3 @@ class PublixWeeklyAd:
 
 if __name__ == '__main__':
     pwa = PublixWeeklyAd.from_store_num(1095)
-    pass

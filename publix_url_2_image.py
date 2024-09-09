@@ -51,6 +51,10 @@ class PublixURL2Image:
         return filename
 
 
-if __name__ == '__main__':
+def main() -> None:
     url = 'https://akimages.shoplocal.com/dyn_li/150.0.88.0/Retailers/Publix/240824ES_11_CPN_98.jpg'
     PublixURL2Image(url).attempt_new_width(5000).to_coupon().show()
+
+
+if __name__ == '__main__':
+    main()
